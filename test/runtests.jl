@@ -70,7 +70,7 @@ end
 
         # abspath("." ) and abspath("..") can return paths with a trailing separator;
         # all three call forms must resolve to the same output directory.
-        src_dir = mkdir(joinpath(dir, "src"))
+        src_dir = mkpath(joinpath(dir, "src"))
         out_dot    = _default_output_dir(joinpath(dir, "."))
         out_dotdot = _default_output_dir(joinpath(src_dir, ".."))
         @test out_dot    == out
