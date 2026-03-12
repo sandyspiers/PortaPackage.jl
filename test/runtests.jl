@@ -7,6 +7,7 @@ using PortaPackage:
     _latest_julia_url,
     _default_output_dir,
     _copy_project,
+    _build_depot,
     _write_sh,
     _write_bat,
     _write_launcher
@@ -93,6 +94,49 @@ end
         # Re-copy overwrites without error
         _copy_project(src, dest)
         @test isfile(joinpath(dest, "Project.toml"))
+    end
+
+    # ── _build_depot ──────────────────────────────────────────────────────────
+    @testset "_build_depot" begin
+        @testset "skips if depot already exists" begin
+            depot = mktempdir()
+            # A nonexistent julia_bin would error — skipping proves the guard works
+            _build_depot("/nonexistent/julia", mktempdir(), depot)
+            @test isdir(depot)
+        end
+
+        @testset "errors if julia_bin not found" begin
+            @test_throws ErrorException _build_depot(
+                "/nonexistent/julia", mktempdir(), joinpath(mktempdir(), "depot")
+            )
+        end
+
+        if !Sys.iswindows()
+            # Use a fake julia binary that logs its arguments so we can inspect
+            # the -e script without running a real Julia subprocess.
+            function make_fake_julia(log_path)
+                path = tempname()
+                write(path, "#!/bin/sh\necho \"\$@\" > \"$log_path\"\nmkdir -p \"\$JULIA_DEPOT_PATH\"\n")
+                chmod(path, 0o755)
+                return path
+            end
+
+            @testset "precompile=true includes Pkg.precompile()" begin
+                log = tempname()
+                fake_julia = make_fake_julia(log)
+                _build_depot(fake_julia, make_project("FakeApp1"), joinpath(mktempdir(), "depot"))
+                @test occursin("Pkg.precompile()", read(log, String))
+            end
+
+            @testset "precompile=false excludes Pkg.precompile()" begin
+                log = tempname()
+                fake_julia = make_fake_julia(log)
+                _build_depot(fake_julia, make_project("FakeApp2"), joinpath(mktempdir(), "depot"); precompile=false)
+                content = read(log, String)
+                @test occursin("Pkg.instantiate()", content)
+                @test !occursin("Pkg.precompile()", content)
+            end
+        end
     end
 
     # ── launcher scripts ──────────────────────────────────────────────────────
@@ -206,6 +250,15 @@ end
             @test isfile(joinpath(proj_dir, "Project.toml"))
             @test isfile(joinpath(proj_dir, "Manifest.toml"))
             @test isdir(joinpath(proj_dir, "src"))
+        end
+
+        @testset "precompile=false accepted without error" begin
+            src = make_project("NoPCApp")
+            out = mktempdir()
+            preseed(out)
+            result = pack(src; output_dir=out, precompile=false)
+            @test result == out
+            @test isdir(joinpath(out, "depot"))
         end
 
         @testset "default output_dir derived from package name" begin

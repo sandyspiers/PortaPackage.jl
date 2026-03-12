@@ -10,7 +10,7 @@ const JULIA_VERSIONS_URL = "https://julialang-s3.julialang.org/bin/versions.json
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 """
-    pack(project_path=pwd(); output_dir)
+    pack(project_path=pwd(); output_dir, precompile=true)
 
 Create a portable distribution bundle of the Julia package at `project_path`
 for the current host platform, using the latest stable Julia release.
@@ -23,6 +23,10 @@ The bundle includes:
 # Arguments
 - `project_path`: Path to the Julia project (default: current directory)
 - `output_dir`: Where to write the bundle (default: `<name>-portable` next to project)
+- `precompile`: Whether to precompile packages into the depot (default: `true`).
+  Precompilation runs with the bundled Julia binary so the cache is valid at runtime,
+  giving users faster startup. Set to `false` to skip it and let Julia precompile on
+  first run instead.
 
 # Example
 ```julia
@@ -31,7 +35,9 @@ pack("/path/to/MyApp")
 ```
 """
 function pack(
-    project_path::String=pwd(); output_dir::String=_default_output_dir(project_path)
+    project_path::String=pwd();
+    output_dir::String=_default_output_dir(project_path),
+    precompile::Bool=true,
 )
     project_path = abspath(project_path)
     toml_path = joinpath(project_path, "Project.toml")
@@ -45,9 +51,11 @@ function pack(
     @info "Packing $pkg_name → $output_dir"
     mkpath(output_dir)
 
-    _download_julia(joinpath(output_dir, "julia"))
+    julia_dir = joinpath(output_dir, "julia")
+    _download_julia(julia_dir)
     _copy_project(project_path, joinpath(output_dir, "project"))
-    _build_depot(joinpath(output_dir, "project"), joinpath(output_dir, "depot"))
+    julia_bin = joinpath(julia_dir, "bin", Sys.iswindows() ? "julia.exe" : "julia")
+    _build_depot(julia_bin, joinpath(output_dir, "project"), joinpath(output_dir, "depot"); precompile)
     _write_launcher(pkg_name, output_dir)
 
     @info "Done! Bundle written to: $output_dir"
@@ -199,21 +207,17 @@ end
 # ── Depot building ────────────────────────────────────────────────────────────
 
 """
-Build a self-contained depot at `depot_dir` by running `Pkg.instantiate()` with
-`JULIA_DEPOT_PATH` pointed at the target directory.
-Skips the build if `depot_dir` already exists.
+Build a self-contained depot at `depot_dir` by running `Pkg.instantiate()` (and
+optionally `Pkg.precompile()`) using `julia_bin` with `JULIA_DEPOT_PATH` pointed
+at the target directory. Skips the build if `depot_dir` already exists.
 """
-function _build_depot(project_dir::String, depot_dir::String)
+function _build_depot(
+    julia_bin::String, project_dir::String, depot_dir::String; precompile::Bool=true
+)
     isdir(depot_dir) && return nothing
-
-    julia_bin = joinpath(Sys.BINDIR, Sys.iswindows() ? "julia.exe" : "julia")
     isfile(julia_bin) || error("Julia binary not found: $julia_bin")
 
-    script = """
-    import Pkg
-    Pkg.instantiate()
-    Pkg.precompile()
-    """
+    script = "import Pkg; Pkg.instantiate()" * (precompile ? "; Pkg.precompile()" : "")
 
     # Build into a temp dir first: if the build fails, the isdir guard won't
     # mistake a partial depot for a successful one on the next run.
