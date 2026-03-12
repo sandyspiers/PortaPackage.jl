@@ -94,7 +94,7 @@ end
             _write_sh("MyApp", path)
 
             @test isfile(path)
-            @test (filemode(path) & 0o111) != 0
+            @test Sys.isexecutable(path)
 
             content = read(path, String)
             @test startswith(content, "#!/bin/sh")
@@ -168,8 +168,8 @@ end
             else
                 @test isfile(joinpath(out, "run.sh"))
                 @test isfile(joinpath(out, "HelloApp.sh"))
-                @test (filemode(joinpath(out, "run.sh")) & 0o111) != 0
-                @test (filemode(joinpath(out, "HelloApp.sh")) & 0o111) != 0
+                @test Sys.isexecutable(joinpath(out, "run.sh"))
+                @test Sys.isexecutable(joinpath(out, "HelloApp.sh"))
             end
         end
 
