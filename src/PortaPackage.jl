@@ -41,6 +41,7 @@ function pack(
     pkg_name = get(project, "name", nothing)
     isnothing(pkg_name) && error("Project.toml missing a 'name' field")
 
+    output_dir = abspath(output_dir)
     @info "Packing $pkg_name → $output_dir"
     mkpath(output_dir)
 
@@ -285,10 +286,14 @@ end
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _default_output_dir(project_path::String)::String
-    p = abspath(project_path)
+    p = normpath(abspath(project_path))
     toml = joinpath(p, "Project.toml")
     name = isfile(toml) ? get(TOML.parsefile(toml), "name", basename(p)) : basename(p)
     return joinpath(dirname(p), name * "-portable")
 end
+
+# ── Debugging ─────────────────────────────────────────────────────────────────
+
+main() = println("Hello, Packer!")
 
 end # module PortaPackage
