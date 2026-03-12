@@ -7,7 +7,6 @@ using PortaPackage:
     _latest_julia_url,
     _default_output_dir,
     _copy_project,
-    _depot_hash,
     _build_depot,
     _write_sh,
     _write_bat,
@@ -21,14 +20,18 @@ function make_project(name)
     return joinpath(parent, name)
 end
 
-# Pre-seeding julia/ and depot/ causes _download_julia and _build_depot to
-# skip their expensive steps. The depot also needs a matching hash file so
-# that _build_depot's hash check agrees the depot is current.
-function preseed(out, src)
-    mkpath(joinpath(out, "julia"))
-    depot = mkpath(joinpath(out, "depot"))
-    write(joinpath(depot, ".pkg_hash"), _depot_hash(src))
-    return depot
+# Preseed plants a no-op fake julia binary so that _download_julia skips the
+# network download and _build_depot runs but does nothing real.
+function preseed(out)
+    bin_dir = mkpath(joinpath(out, "julia", "bin"))
+    fake = joinpath(bin_dir, Sys.iswindows() ? "julia.exe" : "julia")
+    if Sys.iswindows()
+        write(fake, "@echo off\r\n")
+    else
+        write(fake, "#!/bin/sh\nexit 0\n")
+        chmod(fake, 0o755)
+    end
+    return out
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,16 +105,6 @@ end
 
     # ── _build_depot ──────────────────────────────────────────────────────────
     @testset "_build_depot" begin
-        @testset "skips if depot hash is current" begin
-            project = mktempdir()
-            depot = mktempdir()
-            # Write a matching hash so _build_depot sees the depot as up-to-date.
-            # A nonexistent julia_bin would error — no error means the guard worked.
-            write(joinpath(depot, ".pkg_hash"), _depot_hash(project))
-            _build_depot("/nonexistent/julia", project, depot)
-            @test isdir(depot)
-        end
-
         @testset "errors if julia_bin not found" begin
             @test_throws ErrorException _build_depot(
                 "/nonexistent/julia", mktempdir(), joinpath(mktempdir(), "depot")
@@ -123,66 +116,36 @@ end
             # the -e script without running a real Julia subprocess.
             function make_fake_julia(log_path)
                 path = tempname()
-                write(path, "#!/bin/sh\necho \"\$@\" > \"$log_path\"\nmkdir -p \"\$JULIA_DEPOT_PATH\"\n")
+                write(path, "#!/bin/sh\necho \"\$@\" > \"$log_path\"\n")
                 chmod(path, 0o755)
                 return path
             end
 
             @testset "precompile=true includes Pkg.precompile()" begin
                 log = tempname()
-                fake_julia = make_fake_julia(log)
-                _build_depot(fake_julia, make_project("FakeApp1"), joinpath(mktempdir(), "depot"))
+                _build_depot(make_fake_julia(log), make_project("FakeApp1"), joinpath(mktempdir(), "depot"))
                 @test occursin("Pkg.precompile()", read(log, String))
             end
 
             @testset "precompile=false excludes Pkg.precompile()" begin
                 log = tempname()
-                fake_julia = make_fake_julia(log)
-                _build_depot(fake_julia, make_project("FakeApp2"), joinpath(mktempdir(), "depot"); precompile=false)
+                _build_depot(make_fake_julia(log), make_project("FakeApp2"), joinpath(mktempdir(), "depot"); precompile=false)
                 content = read(log, String)
                 @test occursin("Pkg.instantiate()", content)
                 @test !occursin("Pkg.precompile()", content)
             end
 
-            @testset "rebuilds depot when Manifest changes" begin
-                project = make_project("HashTest1")
-                depot_dir = joinpath(mktempdir(), "depot")
-
+            @testset "always runs even when depot already exists" begin
                 log1 = tempname()
-                _build_depot(make_fake_julia(log1), project, depot_dir)
-                @test isfile(log1)
-                @test isfile(joinpath(depot_dir, ".pkg_hash"))
-
-                # Same project — should skip
                 log2 = tempname()
-                _build_depot(make_fake_julia(log2), project, depot_dir)
-                @test !isfile(log2)
-
-                # Manifest changes — should rebuild
-                write(joinpath(project, "Manifest.toml"), "# updated\n")
-                log3 = tempname()
-                _build_depot(make_fake_julia(log3), project, depot_dir)
-                @test isfile(log3)
-            end
-
-            @testset "rebuilds depot when source changes" begin
-                project = make_project("HashTest2")
+                project = make_project("AlwaysRun")
                 depot_dir = joinpath(mktempdir(), "depot")
 
-                log1 = tempname()
                 _build_depot(make_fake_julia(log1), project, depot_dir)
                 @test isfile(log1)
 
-                # Same project — should skip
-                log2 = tempname()
                 _build_depot(make_fake_julia(log2), project, depot_dir)
-                @test !isfile(log2)
-
-                # Source file changes — should rebuild
-                write(joinpath(project, "src", "HashTest2.jl"), "module HashTest2\nend\n")
-                log3 = tempname()
-                _build_depot(make_fake_julia(log3), project, depot_dir)
-                @test isfile(log3)
+                @test isfile(log2)
             end
         end
     end
@@ -253,7 +216,7 @@ end
         @testset "output structure" begin
             src = make_project("HelloApp")
             out = mktempdir()
-            preseed(out, src)
+            preseed(out)
 
             result = pack(src; output_dir=out)
 
@@ -276,7 +239,7 @@ end
         @testset "launcher references the correct package" begin
             src = make_project("SpecialTool")
             out = mktempdir()
-            preseed(out, src)
+            preseed(out)
 
             pack(src; output_dir=out)
 
@@ -290,7 +253,7 @@ end
             src = make_project("CopyTest")
             write(joinpath(src, "Manifest.toml"), "# pinned manifest\n")
             out = mktempdir()
-            preseed(out, src)
+            preseed(out)
 
             pack(src; output_dir=out)
 
@@ -303,7 +266,7 @@ end
         @testset "precompile=false accepted without error" begin
             src = make_project("NoPCApp")
             out = mktempdir()
-            preseed(out, src)
+            preseed(out)
             result = pack(src; output_dir=out, precompile=false)
             @test result == out
             @test isdir(joinpath(out, "depot"))
@@ -312,7 +275,7 @@ end
         @testset "default output_dir derived from package name" begin
             src = make_project("CoolTool")
             expected_out = joinpath(dirname(abspath(src)), "CoolTool-portable")
-            preseed(expected_out, src)
+            preseed(expected_out)
 
             result = pack(src)
 
