@@ -67,6 +67,14 @@ end
         out = _default_output_dir(dir)
         @test basename(out) == "AwesomeApp-portable"
         @test dirname(out) == dirname(abspath(dir))
+
+        # abspath("." ) and abspath("..") can return paths with a trailing separator;
+        # all three call forms must resolve to the same output directory.
+        src_dir = mkdir(joinpath(dir, "src"))
+        out_dot    = _default_output_dir(joinpath(dir, "."))
+        out_dotdot = _default_output_dir(joinpath(src_dir, ".."))
+        @test out_dot    == out
+        @test out_dotdot == out
     end
 
     # ── _copy_project ─────────────────────────────────────────────────────────

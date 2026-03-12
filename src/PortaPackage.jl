@@ -286,7 +286,10 @@ end
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _default_output_dir(project_path::String)::String
-    p = normpath(abspath(project_path))
+    p = abspath(project_path)
+    # abspath (via normpath) can leave a trailing separator when resolving "." or "..";
+    # if basename is empty the path ended in a separator, so use dirname to strip it.
+    isempty(basename(p)) && (p = dirname(p))
     toml = joinpath(p, "Project.toml")
     name = isfile(toml) ? get(TOML.parsefile(toml), "name", basename(p)) : basename(p)
     return joinpath(dirname(p), name * "-portable")
