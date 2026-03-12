@@ -1,0 +1,16 @@
+name = "PortaPackage"
+uuid = "7b010f9a-5e6d-4284-8ef2-8936a10c23a1"
+version = "0.1.0"
+authors = ["sandyspiers <sandy.spiers@gmail.com>"]
+
+[deps]
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+Downloads = "1.7.0"
+Pkg = "1.12.1"
+TOML = "1.0.3"
+Test = "1.11.0"
