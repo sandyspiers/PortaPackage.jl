@@ -207,19 +207,51 @@ end
 # ── Depot building ────────────────────────────────────────────────────────────
 
 """
+Return a hash string derived from the contents of `Project.toml`,
+`Manifest.toml`, and all files under `src/` in `project_dir`. Used to detect
+when the depot needs to be rebuilt due to dependency or source changes.
+"""
+function _depot_hash(project_dir::String)::String
+    content = ""
+    for fname in ("Project.toml", "Manifest.toml")
+        p = joinpath(project_dir, fname)
+        isfile(p) && (content *= read(p, String))
+    end
+    src_dir = joinpath(project_dir, "src")
+    if isdir(src_dir)
+        for (root, _, files) in walkdir(src_dir)
+            for f in sort(files)
+                content *= read(joinpath(root, f), String)
+            end
+        end
+    end
+    return string(hash(content))
+end
+
+"""
 Build a self-contained depot at `depot_dir` by running `Pkg.instantiate()` (and
 optionally `Pkg.precompile()`) using `julia_bin` with `JULIA_DEPOT_PATH` pointed
-at the target directory. Skips the build if `depot_dir` already exists.
+at the target directory. Skips the build if `depot_dir` already exists and its
+stored hash matches the current `Project.toml` + `Manifest.toml`; otherwise
+deletes the stale depot and rebuilds.
 """
 function _build_depot(
     julia_bin::String, project_dir::String, depot_dir::String; precompile::Bool=true
 )
-    isdir(depot_dir) && return nothing
+    current_hash = _depot_hash(project_dir)
+    hash_file = joinpath(depot_dir, ".pkg_hash")
+
+    if isdir(depot_dir)
+        stored_hash = isfile(hash_file) ? read(hash_file, String) : ""
+        stored_hash == current_hash && return nothing
+        rm(depot_dir; recursive=true)
+    end
+
     isfile(julia_bin) || error("Julia binary not found: $julia_bin")
 
     script = "import Pkg; Pkg.instantiate()" * (precompile ? "; Pkg.precompile()" : "")
 
-    # Build into a temp dir first: if the build fails, the isdir guard won't
+    # Build into a temp dir first: if the build fails, the hash-check won't
     # mistake a partial depot for a successful one on the next run.
     tmp = mktempdir(dirname(depot_dir))
     try
@@ -233,6 +265,7 @@ function _build_depot(
             ),
         )
         mv(tmp, depot_dir)
+        write(hash_file, current_hash)
     catch
         rm(tmp; recursive=true, force=true)
         rethrow()
