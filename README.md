@@ -1,73 +1,34 @@
-# PortaPackage.jl
+# PortaPackage
 
-Make any Julia package portable — no installation required on the target machine.
-
-**Note: this package was entirely vibe-coded for a specific use case. It works for me, but it has not been stressed tested.**
-
-## The problem
-
-Distributing Julia programs is hard. Asking users to install Julia, set up depots, and manage environments creates friction. [PackageCompiler.jl](https://github.com/JuliaLang/PackageCompiler.jl) can produce standalone apps, but compilation frequently fails for packages with complex dependencies or non-relocatable artifacts.
-
-## The solution
-
-PortaPackage bundles everything the target machine needs into a single directory:
-
-| What                             | Where                                           |
-| -------------------------------- | ----------------------------------------------- |
-| Julia binary (the right version) | `julia/`                                        |
-| All package dependencies         | `depot/`                                        |
-| Your project's source files      | `project/`                                      |
-| Launch scripts                   | `run.sh` + `MyApp.sh` / `run.bat` + `MyApp.bat` |
-
-Two equivalent launchers are written — `run` and one named after your package — so users can invoke the bundle either way. Both set `JULIA_DEPOT_PATH` to the bundled depot and invoke `PackageName.main()`. No internet, no `julia` on PATH, no environment setup needed on the target.
-
-## Requirements
-
-Your package must define a `main()` function as the entry point:
-
-```julia
-module MyApp
-
-function main()
-    println("Hello from MyApp!")
-end
-
-end
-```
+Bundles your Julia project into a portable,
+self-contained directory — including a matching Julia binary and all dependencies.
+Ships with a shell script (or `.bat` on Windows) that launches your app directly via `julia -m`.
 
 ## Usage
 
 ```julia
 using PortaPackage
 
-# Bundle the package in the current directory
-pack()
+# just produce a zip in myproject/bin/
+pack("path/to/myproject")
 
-# Bundle a specific package
-pack("/path/to/MyApp")
+# copy the bundle to a directory, no zip
+pack("path/to/myproject"; output_path="path/to/output", compress=false)
 
-# Specify a custom output location
-pack("/path/to/MyApp"; output_dir="/tmp/MyApp-bundle")
+# do both
+pack("path/to/myproject"; output_path="path/to/output")
 ```
 
-`pack()` always targets the **current host platform** and bundles the **latest stable Julia release**. To produce a bundle for a different OS, run `pack()` on a machine running that OS.
+Your project needs a `Project.toml` with a `name` field,
+and should be runnable via `julia -m <name>`,
+[(must have main entry point)](https://pkgdocs.julialang.org/dev/apps/).
 
-## Output layout
+## Limitations
 
-```
-MyApp-portable/
-├── julia/          # Extracted Julia binary distribution
-├── depot/          # Self-contained package depot (Pkg.instantiate'd)
-├── project/        # Project.toml + Manifest.toml + src/
-├── run.sh          # Generic launcher (Linux / macOS)
-├── MyApp.sh        # Package-named launcher (Linux / macOS)
-├── run.bat         # Generic launcher (Windows)
-└── MyApp.bat       # Package-named launcher (Windows)
-```
+- Targets the currently running Julia version — cross-version bundling isn't supported.
+- The bundled binary is platform-specific, so you can't build for a different OS.
 
-## How it works
+## Similar Packages
 
-1. **Download** — queries `versions.json` on julialang.org for the latest stable release, fetches the binary tarball/zip for the host platform, and extracts it into `julia/`.
-2. **Copy** — copies `Project.toml`, `Manifest.toml`, and `src/` into `project/`.
-3. **Depot** — runs `Pkg.instantiate()` + `Pkg.precompile()` with `JULIA_DEPOT_PATH` pointed at `depot/`, pulling all dependencies into the bundle.
-4. **Launchers** — writes two shell/batch scripts (`run` and `MyApp`) that set `JULIA_DEPOT_PATH` and `exec` the bundled Julia with `-e 'using MyApp; MyApp.main()'`.
+- `AppBundler.jl` does the same as this, but designed for GUI's, and comes with an installer that usually has to be signed.
+- `PackageCompiler.jl`
