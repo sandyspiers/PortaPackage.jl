@@ -89,6 +89,9 @@ end
     @testset "_copy_project" begin
         src = make_project("TestPkg")
         write(joinpath(src, "Manifest.toml"), "# manifest\n")
+        write(joinpath(src, "README.md"), "# TestPkg\n")
+        mkpath(joinpath(src, "scripts"))
+        write(joinpath(src, "scripts", "run.sh"), "#!/bin/sh\n")
 
         dest = joinpath(mktempdir(), "copy")
         _copy_project(src, dest)
@@ -97,6 +100,10 @@ end
         @test isfile(joinpath(dest, "Manifest.toml"))
         @test isdir(joinpath(dest, "src"))
         @test isfile(joinpath(dest, "src", "TestPkg.jl"))
+        @test isfile(joinpath(dest, "README.md"))
+        @test isdir(joinpath(dest, "scripts"))
+        @test isfile(joinpath(dest, "scripts", "run.sh"))
+        @test !isdir(joinpath(dest, ".git"))
 
         # Re-copy overwrites without error
         _copy_project(src, dest)

@@ -17,6 +17,7 @@ for the current host platform, using the latest stable Julia release.
 
 The bundle includes:
 - The Julia binary (latest stable, host platform)
+- The entire project directory (excluding `.git`)
 - A self-contained depot with all package dependencies installed
 - A launcher script that invokes `PackageName.main()`
 
@@ -191,17 +192,15 @@ end
 # ── Project copying ───────────────────────────────────────────────────────────
 
 """
-Copy the essential project files (Project.toml, Manifest.toml, src/) to `dest`.
+Copy the entire project directory to `dest`, excluding `.git`.
 """
 function _copy_project(src::String, dest::String)
     isdir(dest) && rm(dest; recursive=true)
     mkpath(dest)
-    for fname in ("Project.toml", "Manifest.toml")
-        p = joinpath(src, fname)
-        isfile(p) && cp(p, joinpath(dest, fname))
+    for entry in readdir(src; join=false)
+        entry == ".git" && continue
+        cp(joinpath(src, entry), joinpath(dest, entry))
     end
-    src_dir = joinpath(src, "src")
-    return isdir(src_dir) && cp(src_dir, joinpath(dest, "src"))
 end
 
 # ── Depot building ────────────────────────────────────────────────────────────
