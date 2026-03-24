@@ -2,6 +2,8 @@
 
 Make any Julia package portable — no installation required on the target machine.
 
+**Note: this package was entirely vibe-coded for a specific use case. It works for me, but it has not been stressed tested.**
+
 ## The problem
 
 Distributing Julia programs is hard. Asking users to install Julia, set up depots, and manage environments creates friction. [PackageCompiler.jl](https://github.com/JuliaLang/PackageCompiler.jl) can produce standalone apps, but compilation frequently fails for packages with complex dependencies or non-relocatable artifacts.
@@ -10,12 +12,12 @@ Distributing Julia programs is hard. Asking users to install Julia, set up depot
 
 PortaPackage bundles everything the target machine needs into a single directory:
 
-| What                             | Where                                              |
-| -------------------------------- | -------------------------------------------------- |
-| Julia binary (the right version) | `julia/`                                           |
-| All package dependencies         | `depot/`                                           |
-| Your project's source files      | `project/`                                         |
-| Launch scripts                   | `run.sh` + `MyApp.sh` / `run.bat` + `MyApp.bat`   |
+| What                             | Where                                           |
+| -------------------------------- | ----------------------------------------------- |
+| Julia binary (the right version) | `julia/`                                        |
+| All package dependencies         | `depot/`                                        |
+| Your project's source files      | `project/`                                      |
+| Launch scripts                   | `run.sh` + `MyApp.sh` / `run.bat` + `MyApp.bat` |
 
 Two equivalent launchers are written — `run` and one named after your package — so users can invoke the bundle either way. Both set `JULIA_DEPOT_PATH` to the bundled depot and invoke `PackageName.main()`. No internet, no `julia` on PATH, no environment setup needed on the target.
 
