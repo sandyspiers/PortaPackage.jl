@@ -2,21 +2,19 @@ using Test
 using PortaPackage
 
 @testset "get_shell_script" begin
-    script = PortaPackage.get_shell_script("MyApp", "my_depot", "my_depot/bin/julia")
+    script = PortaPackage.get_shell_script("MyApp", "juliaup/julia-1.x/bin/julia")
     @test contains(script, "#!/bin/sh")
     @test contains(script, "MyApp")
-    @test contains(script, "my_depot")
-    @test contains(script, "my_depot/bin/julia")
-    @test contains(script, "JULIA_DEPOT_PATH")
+    @test contains(script, "juliaup/julia-1.x/bin/julia")
+    @test contains(script, "JULIA_DEPOT_PATH=\"\$DIR\"")
 end
 
 @testset "get_bat_script" begin
-    script = PortaPackage.get_bat_script("MyApp", "my_depot", "my_depot/bin/julia.exe")
+    script = PortaPackage.get_bat_script("MyApp", "juliaup/julia-1.x/bin/julia.exe")
     @test contains(script, "@echo off")
     @test contains(script, "MyApp")
-    @test contains(script, "my_depot")
-    @test contains(script, "my_depot/bin/julia.exe")
-    @test contains(script, "JULIA_DEPOT_PATH")
+    @test contains(script, "juliaup/julia-1.x/bin/julia.exe")
+    @test contains(script, "JULIA_DEPOT_PATH=%DIR%")
 end
 
 @testset "pack argument validation" begin

@@ -28,10 +28,13 @@ function pack(project_path; output_path=nothing, compress=true)
     # create depot in a temp file,
     # this since we CANNOT do this in projec path,
     # otherwise we get recursive copying
-    mktempdir() do temp_depot_dir
+    mktempdir() do temp_dir
+        temp_depot_dir = joinpath(temp_dir, app_name)
+        mkpath(temp_depot_dir)
         julia_path = download_julia(temp_depot_dir)
         populate_depot(project_path, temp_depot_dir)
         create_executable(app_name, temp_depot_dir, julia_path)
+        update_startup_jl(app_name, temp_depot_dir)
         if !isnothing(output_path)
             cp(temp_depot_dir, output_path; force=true)
         end
@@ -85,11 +88,11 @@ end
 """
 Returns a shell scripts with correct paths and names
 """
-function get_shell_script(app_name, depot_dir, julia_path)
+function get_shell_script(app_name, julia_path)
     return """
 #!/bin/sh
 DIR="\$(cd "\$(dirname "\$0")" && pwd)"
-export JULIA_DEPOT_PATH="\$DIR/$depot_dir"
+export JULIA_DEPOT_PATH="\$DIR"
 "\$DIR/$julia_path" -m $app_name
 """
 end
@@ -97,11 +100,11 @@ end
 """
 Returns a bat scripts with correct paths and names
 """
-function get_bat_script(app_name, depot_dir, julia_path)
+function get_bat_script(app_name, julia_path)
     return """
 @echo off
 set DIR=%~dp0
-set JULIA_DEPOT_PATH=%DIR%$depot_dir
+set JULIA_DEPOT_PATH=%DIR%
 "%DIR%$julia_path" -m $app_name
 """
 end
@@ -113,16 +116,35 @@ Puts this file in the depot
 function create_executable(app_name, depot_dir, julia_path)
     if Sys.iswindows()
         open(joinpath(depot_dir, "$app_name.bat"), "w") do f
-            write(f, get_bat_script(app_name, depot_dir, julia_path))
+            write(f, get_bat_script(app_name, julia_path))
         end
     else
         script_path = joinpath(depot_dir, "$app_name.sh")
         open(script_path, "w") do f
-            write(f, get_shell_script(app_name, depot_dir, julia_path))
+            write(f, get_shell_script(app_name, julia_path))
         end
         chmod(script_path, 0o755)
     end
     return nothing
 end
+
+function update_startup_jl(app_name, depot_dir)
+    config_dir = joinpath(depot_dir, "config")
+    mkpath(config_dir)
+    open(joinpath(config_dir, "startup.jl"), "w") do f
+        write(
+            f,
+            """
+using Pkg
+Pkg.develop("$app_name")
+Pkg.instantiate()
+""",
+        )
+    end
+end
+
+# For debugging
+export main
+(@main)(args) = println("Hello packer!")
 
 end # module PortaPackage
