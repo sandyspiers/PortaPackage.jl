@@ -2,28 +2,54 @@ module PortaPackage
 
 using Glob: glob
 using DepotDelivery: build
+using TOML
 
 # binary wrappers
 using juliaup_jll
+using p7zip_jll
 
-export download_julia, populate_depot
+export pack
 
-function pack(project_path, output_path; zip=true)
-    # TODO: get app name from project_path/Project.toml
-    # 
+"""
+Packs a Julia project into a portable, self-contained directory.
+Downloads a matching Julia binary and populates a depot with all dependencies.
+If `output_path` is provided, copies the result there.
+If `compress=true` (default), creates a zip archive in `project_path/bin/`.
+Returns the zip path if compressing, otherwise `output_path`.
+At least one of `output_path` or `compress=true` must be specified.
+"""
+function pack(project_path; output_path=nothing, compress=true)
+    if isnothing(output_path) && !compress
+        error("At least one of `output_path` or `compress=true` must be specified")
+    end
+    # get app name from Project.toml
+    app_name = TOML.parsefile(joinpath(project_path, "Project.toml"))["name"]
+    zip_path = nothing
+    # create depot in a temp file,
+    # this since we CANNOT do this in projec path,
+    # otherwise we get recursive copying
     mktempdir() do temp_depot_dir
         julia_path = download_julia(temp_depot_dir)
         populate_depot(project_path, temp_depot_dir)
         create_executable(app_name, temp_depot_dir, julia_path)
-        # TODO copy temp_depot_dir contains into output_path
+        if !isnothing(output_path)
+            cp(temp_depot_dir, output_path; force=true)
+        end
+        # use 7zip to compress if asked
+        if compress
+            bin_dir = mkpath(joinpath(project_path, "bin"))
+            zip_src = isnothing(output_path) ? temp_depot_dir : output_path
+            zip_path = joinpath(bin_dir, "$app_name.zip")
+            p7zip_exe = p7zip_jll.p7zip_path
+            run(`$p7zip_exe a $zip_path $zip_src`)
+        end
     end
-    if zip
-        # TODO handel zips using 7z, use same name as app_name, and save in project_dir/bin 
-    end
+    return compress ? zip_path : output_path
 end
 
 """
 Uses juliaup to download a version of julia matching this one.
+Downloads into depot_dir
 Returns the julia executable path, relative to the depot
 """
 function download_julia(depot_dir)::AbstractString
@@ -56,6 +82,9 @@ function populate_depot(project_path, depot_dir)
     return build(project_path, depot_dir)
 end
 
+"""
+Returns a shell scripts with correct paths and names
+"""
 function get_shell_script(app_name, depot_dir, julia_path)
     return """
 #!/bin/sh
@@ -65,23 +94,33 @@ export JULIA_DEPOT_PATH="\$DIR/$depot_dir"
 """
 end
 
+"""
+Returns a bat scripts with correct paths and names
+"""
 function get_bat_script(app_name, depot_dir, julia_path)
-    # TODO replicate the above
     return """
+@echo off
+set DIR=%~dp0
+set JULIA_DEPOT_PATH=%DIR%$depot_dir
+"%DIR%$julia_path" -m $app_name
 """
 end
 
 """
-Creates the corresponding executable file, depending on the system
+Creates the corresponding executable file, depending on the system.
+Puts this file in the depot
 """
 function create_executable(app_name, depot_dir, julia_path)
     if Sys.iswindows()
-        # TODO replicate below
+        open(joinpath(depot_dir, "$app_name.bat"), "w") do f
+            write(f, get_bat_script(app_name, depot_dir, julia_path))
+        end
     else
-        open(joinpath(depot_dir, "$app_name.sh"), "w") do f
+        script_path = joinpath(depot_dir, "$app_name.sh")
+        open(script_path, "w") do f
             write(f, get_shell_script(app_name, depot_dir, julia_path))
         end
-        # TODO make executable permissions
+        chmod(script_path, 0o755)
     end
     return nothing
 end
