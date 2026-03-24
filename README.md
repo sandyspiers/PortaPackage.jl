@@ -19,6 +19,10 @@ pack("path/to/myproject"; output_path="path/to/output", compress=false)
 pack("path/to/myproject"; output_path="path/to/output")
 ```
 
+The launcher script sets `USER_DATA` to the `usr/` subdirectory inside the bundle,
+giving your app a stable, writable location for user data (config, saves, etc.).
+This directory is created automatically during packing.
+
 Your project needs a `Project.toml` with a `name` field,
 and should be runnable via `julia -m <name>`,
 [(must have main entry point)](https://pkgdocs.julialang.org/dev/apps/).

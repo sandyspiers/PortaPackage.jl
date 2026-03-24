@@ -33,6 +33,7 @@ function pack(project_path; output_path=nothing, compress=true)
         mkpath(temp_depot_dir)
         julia_path = download_julia(temp_depot_dir)
         populate_depot(project_path, temp_depot_dir)
+        mkpath(joinpath(temp_depot_dir, "usr"))
         create_executable(app_name, temp_depot_dir, julia_path)
         update_startup_jl(app_name, temp_depot_dir)
         if !isnothing(output_path)
@@ -93,6 +94,7 @@ function get_shell_script(app_name, julia_path)
 #!/bin/sh
 DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 export JULIA_DEPOT_PATH="\$DIR"
+export USER_DATA="\$DIR/usr"
 "\$DIR/$julia_path" -m $app_name
 """
 end
@@ -105,6 +107,7 @@ function get_bat_script(app_name, julia_path)
 @echo off
 set DIR=%~dp0
 set JULIA_DEPOT_PATH=%DIR%
+set USER_DATA=%DIR%usr
 "%DIR%$julia_path" -m $app_name
 """
 end
