@@ -35,7 +35,8 @@ function pack(project_path; output_path=nothing, compress=true)
         populate_depot(project_path, temp_depot_dir)
         mkpath(joinpath(temp_depot_dir, "usr"))
         create_executable(app_name, temp_depot_dir, julia_path)
-        update_startup_jl(app_name, temp_depot_dir)
+        create_install_script(app_name, temp_depot_dir, julia_path)
+        update_startup_jl(temp_depot_dir)
         if !isnothing(output_path)
             cp(temp_depot_dir, output_path; force=true)
         end
@@ -140,10 +141,46 @@ function create_executable(app_name, depot_dir, julia_path)
     return nothing
 end
 
-function update_startup_jl(app_name, depot_dir)
+function update_startup_jl(depot_dir)
     config_dir = joinpath(depot_dir, "config")
     mkpath(config_dir)
     open(joinpath(config_dir, "startup.jl"), "w") do f
+        write(f, "")
+    end
+end
+
+"""
+Returns a shell install script that runs Pkg.develop and Pkg.instantiate once.
+"""
+function get_install_sh_script(julia_path)
+    return """
+#!/bin/sh
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+export JULIA_DEPOT_PATH="\$DIR"
+"\$DIR/$julia_path" "\$DIR/config/install.jl"
+"""
+end
+
+"""
+Returns a bat install script that runs Pkg.develop and Pkg.instantiate once.
+"""
+function get_install_bat_script(julia_path)
+    return """
+@echo off
+set DIR=%~dp0
+set JULIA_DEPOT_PATH=%DIR%
+"%DIR%$julia_path" "%DIR%config\\install.jl"
+"""
+end
+
+"""
+Creates install.sh (or install.bat on Windows) and config/install.jl.
+The user runs this once to set up the package before first use.
+"""
+function create_install_script(app_name, depot_dir, julia_path)
+    config_dir = joinpath(depot_dir, "config")
+    mkpath(config_dir)
+    open(joinpath(config_dir, "install.jl"), "w") do f
         write(
             f,
             """
@@ -152,6 +189,17 @@ Pkg.develop("$app_name")
 Pkg.instantiate()
 """,
         )
+    end
+    if Sys.iswindows()
+        open(joinpath(depot_dir, "$(app_name)Install.bat"), "w") do f
+            write(f, get_install_bat_script(julia_path))
+        end
+    else
+        script_path = joinpath(depot_dir, "$(app_name)Install.sh")
+        open(script_path, "w") do f
+            write(f, get_install_sh_script(julia_path))
+        end
+        chmod(script_path, 0o755)
     end
 end
 
