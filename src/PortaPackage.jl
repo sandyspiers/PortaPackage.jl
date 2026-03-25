@@ -68,14 +68,7 @@ function download_julia(depot_dir)::AbstractString
         run(`$juliaup_exe add $VERSION`)
     end
     # find the executable path for julia
-    matching_paths = glob("juliaup/julia-*/bin/julia", depot_dir)
-    if isempty(matching_paths)
-        error("Could not find julia binary")
-    end
-    julia_path = first(matching_paths)
-    if !Sys.isexecutable(julia_path)
-        error("Julia path found is not executable: $julia_path")
-    end
+    julia_path = find_julia_path(depot_dir)
     return relpath(julia_path, depot_dir)
 end
 
@@ -84,6 +77,22 @@ Uses DepotDelivery to populate the project depot at the desired path.
 """
 function populate_depot(project_path, depot_dir)
     return build(project_path, depot_dir)
+end
+
+function find_julia_path(depot_dir)
+    matching_paths = if Sys.iswindows()
+        glob("juliaup/julia-*/bin/julia.exe", depot_dir)
+    else
+        glob("juliaup/julia-*/bin/julia", depot_dir)
+    end
+    if isempty(matching_paths)
+        error("Could not find julia binary")
+    end
+    julia_path = first(matching_paths)
+    if !Sys.isexecutable(julia_path)
+        error("Julia path found is not executable: $julia_path")
+    end
+    return julia_path
 end
 
 """
