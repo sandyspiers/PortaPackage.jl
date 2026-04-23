@@ -13,8 +13,8 @@ export pack
 """
 Packs a Julia project into a portable, self-contained directory.
 Downloads a matching Julia binary and populates a depot with all dependencies.
-If `output_path` is provided, copies the result there.
 If `compress=true` (default), creates a zip archive in `project_path/bin/`.
+If `output_path` is provided, copies the result there (after compression, if enabled).
 Returns the zip path if compressing, otherwise `output_path`.
 At least one of `output_path` or `compress=true` must be specified.
 """
@@ -37,16 +37,15 @@ function pack(project_path; output_path=nothing, compress=true)
         create_executable(app_name, temp_depot_dir, julia_path)
         create_install_script(app_name, temp_depot_dir, julia_path)
         update_startup_jl(temp_depot_dir)
-        if !isnothing(output_path)
-            cp(temp_depot_dir, output_path; force=true)
-        end
-        # use 7zip to compress if asked
+        # compress first (from temp), then copy — avoids copying large dirs before compression
         if compress
             bin_dir = mkpath(joinpath(project_path, "bin"))
-            zip_src = isnothing(output_path) ? temp_depot_dir : output_path
             zip_path = joinpath(bin_dir, "$app_name.zip")
             p7zip_exe = p7zip_jll.p7zip_path
-            run(`$p7zip_exe a $zip_path $zip_src`)
+            run(`$p7zip_exe a $zip_path $temp_depot_dir`)
+        end
+        if !isnothing(output_path)
+            cp(temp_depot_dir, output_path; force=true)
         end
     end
     return compress ? zip_path : output_path
