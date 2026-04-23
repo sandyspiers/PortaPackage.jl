@@ -74,9 +74,19 @@ end
 
 """
 Uses DepotDelivery to populate the project depot at the desired path.
+On Windows, uses a patched build script that swaps cp() for robocopy to avoid
+a Julia sendfile bug that causes failures on large directory trees.
 """
 function populate_depot(project_path, depot_dir)
-    return build(project_path, depot_dir)
+    if Sys.iswindows()
+        julia = Base.julia_cmd()
+        script_jl = joinpath(@__DIR__, "windows_build_script.jl")
+        triplet = Base.BinaryPlatforms.triplet(Base.BinaryPlatforms.HostPlatform())
+        run(`$julia $script_jl true $triplet $project_path $depot_dir false false`)
+        return depot_dir
+    else
+        return build(project_path, depot_dir)
+    end
 end
 
 function find_julia_path(depot_dir)
